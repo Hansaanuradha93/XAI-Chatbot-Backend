@@ -1,0 +1,124 @@
+# ==========================
+# Python / FastAPI Template
+# ==========================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+*.hypothesis/
+.pytest_cache/
+test-results/
+
+# Translations
+*.mo
+*.pot
+
+# Django / Flask / FastAPI specific
+instance/
+.webassets-cache
+*.db
+*.sqlite3
+*.sqlite
+*.db-journal
+
+# VSCode / IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs
+*.log
+*.out
+*.err
+
+# Environment variables
+.env
+.env.*
+secrets.toml
+
+# Model files / large binaries
+*.pkl
+*.joblib
+*.h5
+*.pt
+*.onnx
+*.sav
+*.model
+*.weights
+
+# Data / datasets
+data/
+datasets/
+raw_data/
+temp/
+*.csv
+*.xlsx
+*.tsv
+
+# Build and distribution
+build/
+dist/
+*.egg-info/
+*.egg
+MANIFEST
+
+# Uvicorn / Gunicorn logs
+*.pid
+*.pid.lock
+
+# PyCharm cache
+.idea/
+*.iml
+
+# MyPy / pytype / pyright
+.mypy_cache/
+.pytype/
+.pyright/
+
+# Local test or debug files
+*.bak
+*.tmp
+*.swp
+*.orig
