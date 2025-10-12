@@ -55,20 +55,29 @@ def predict_loan(data: LoanApplication):
     label = "Approved" if prediction == 1 else "Rejected"
 
     # Generate SHAP explanations
-    # Generate SHAP explanations
+    feature_importance = {}  # <-- define early so it's always available
+
     try:
         shap_values = explainer.shap_values(scaled)
 
-        # Handle both list-based (old) and array-based (new) SHAP outputs
-        if isinstance(shap_values, list):
-            shap_values = shap_values[1]  # use positive class (approved)
+        # ✅ Handle different SHAP output structures
+        if isinstance(shap_values, list):  # For TreeExplainer (list per class)
+            shap_values = shap_values[1]  # positive class (Approved)
 
-        # Convert SHAP values safely to float
-        shap_array = np.array(shap_values)[0]
+        shap_array = np.array(shap_values)
+
+        # Normalize shape
+        if shap_array.ndim == 3:
+            shap_array = shap_array[:, 0, :]
+        elif shap_array.ndim == 1:
+            shap_array = shap_array.reshape(1, -1)
+
+        # Convert to JSON-safe dict
         feature_importance = {
-            str(col): float(val)
-                for col, val in zip(input_data.columns, shap_array)
-        }
+            str(col): round(float(val), 4)
+            for col, val in zip(input_data.columns, shap_array[0])
+            }
+
     except Exception as e:
         feature_importance = {"error": f"SHAP explanation failed: {e}"}
 
