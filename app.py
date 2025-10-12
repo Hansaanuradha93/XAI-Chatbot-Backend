@@ -1,32 +1,85 @@
-# app.py
-from fastapi import FastAPI
-from pydantic import BaseModel
-import joblib, shap, numpy as np
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
+import joblib
+import numpy as np
+import pandas as pd
+import shap
 
-app = FastAPI()
+# --- Initialize FastAPI app ---
+app = FastAPI(title="TrustAI Loan Prediction API", version="1.0")
 
-model = joblib.load("model.pkl")
-explainer = shap.Explainer(model)
+# --- Load your model, scaler, and explainer ---
+MODEL_PATH = "./models/model.pkl"
+SCALER_PATH = "./models/preprocess.pkl"
+EXPLAINER_PATH = "./models/explainer.pkl"
 
-class LoanInput(BaseModel):
-    features: dict
+try:
+    model = joblib.load(MODEL_PATH)
+    scaler = joblib.load(SCALER_PATH)
+    explainer = joblib.load(EXPLAINER_PATH)
+    print("✅ Model, Scaler, and Explainer loaded successfully.")
+except Exception as e:
+    print(f"❌ Error loading model files: {e}")
+    model = scaler = explainer = None
 
-@app.get("/health")
-def health(): return {"ok": True}
+
+# --- Input schema for loan applications ---
+class LoanApplication(BaseModel):
+    education: int = Field(..., description="0 = Graduate, 1 = Not Graduate")
+    self_employed: int = Field(..., description="1 = Yes, 0 = No")
+    income_annum: float = Field(..., ge=0, description="Annual income (>=0)")
+    loan_amount: float = Field(..., ge=0, description="Requested loan amount (>=0)")
+    loan_term: int = Field(..., ge=1, le=12, description="Repayment duration (1–12 months)")
+    cibil_score: float = Field(..., ge=300, le=900, description="Credit score (300–900)")
+
+
+@app.get("/")
+def home():
+    return {"message": "🚀 TrustAI Loan Prediction API is running!"}
+
 
 @app.post("/predict")
-def predict(inp: LoanInput):
-    X = np.array([list(inp.features.values())])
-    pred = model.predict(X)[0]
-    return {"result": int(pred)}
+def predict_loan(data: LoanApplication):
+    """Predict loan approval and provide SHAP-based explanations."""
+    if model is None or scaler is None:
+        raise HTTPException(status_code=500, detail="Model files not loaded properly.")
 
-@app.post("/predict_explain")
-def predict_explain(inp: LoanInput):
-    X = np.array([list(inp.features.values())])
-    shap_vals = explainer(X)
-    feature_names = list(inp.features.keys())
-    top = sorted(zip(feature_names, shap_vals.values[0]),
-                 key=lambda x: abs(x[1]), reverse=True)[:3]
-    explanation = [{"feature": f, "impact": float(v)} for f, v in top]
-    return {"result": int(model.predict(X)[0]),
-            "explanation": explanation}
+    # Convert input into DataFrame
+    input_data = pd.DataFrame([data.dict()])
+
+    # Scale numeric features using saved scaler
+    scaled = scaler.transform(input_data)
+
+    # Predict loan status (1 = approved, 0 = rejected)
+    prediction = int(model.predict(scaled)[0])
+    label = "Approved" if prediction == 1 else "Rejected"
+
+    # Generate SHAP explanations
+    # Generate SHAP explanations
+    try:
+        shap_values = explainer.shap_values(scaled)
+
+        # Handle both list-based (old) and array-based (new) SHAP outputs
+        if isinstance(shap_values, list):
+            shap_values = shap_values[1]  # use positive class (approved)
+
+        # Convert SHAP values safely to float
+        shap_array = np.array(shap_values)[0]
+        feature_importance = {
+            str(col): float(val)
+                for col, val in zip(input_data.columns, shap_array)
+        }
+    except Exception as e:
+        feature_importance = {"error": f"SHAP explanation failed: {e}"}
+
+    # Response payload
+    return {
+        "prediction": label,
+        "explanation": feature_importance,
+    }
+
+
+# --- Run with: uvicorn app:app --reload ---
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
