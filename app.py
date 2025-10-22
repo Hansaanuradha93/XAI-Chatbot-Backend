@@ -7,10 +7,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from joblib import load
 from sentence_transformers import SentenceTransformer, util
+from supabase import create_client, Client
+from datetime import datetime
+from dotenv import load_dotenv
+from typing import Optional
 
 # -------------------------------------------------
 # 1️⃣ Basic App Config
 # -------------------------------------------------
+
+# Load environment variables from .env file
+load_dotenv()
 app = FastAPI(title="TrustAI Backend")
 
 app.add_middleware(
@@ -99,7 +106,20 @@ def predict_loan(data: LoanApplication):
     }
 
 # -------------------------------------------------
-# 4️⃣ FAQ Semantic Search with GPT-5 Fallback
+# 4️⃣ Supabase Client Setup
+# -------------------------------------------------
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+supabase: Client = None
+
+if SUPABASE_URL and SUPABASE_KEY:
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    print("✅ Supabase connected.")
+else:
+    print("⚠️ Supabase credentials not set. Logging disabled.")
+
+# -------------------------------------------------
+# 5️⃣ FAQ Semantic Search with GPT-5 Fallback
 # -------------------------------------------------
 FAQ_CSV = "data/faq/faq_cleaned.csv"
 EMBED_PATH = "data/faq/faq_embeddings.npy"
@@ -121,6 +141,7 @@ SIM_THRESHOLD = 0.60
 
 class FAQQuery(BaseModel):
     query: str
+    user_email: Optional[str] = None
 
 @app.post("/faq_answer")
 def faq_answer(payload: FAQQuery):
@@ -136,47 +157,79 @@ def faq_answer(payload: FAQQuery):
     top_idx = int(np.argmax(sims))
     best_score = float(sims[top_idx])
 
+    result = {}
+    variant = "faq"
+    matched_q = None
+    src = "BankFAQs"
+
     if best_score >= SIM_THRESHOLD:
-        return {
+        result = {
             "answer": faq_answers[top_idx],
             "match": faq_questions[top_idx],
             "class": faq_classes[top_idx],
             "similarity": round(best_score, 3),
-            "source": "BankFAQs"
+            "source": src
         }
+        matched_q = faq_questions[top_idx]
+    else:
+        # GPT fallback
+        OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+        variant = "gpt-fallback"
 
-    # --- GPT-5 fallback (optional) ---
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    if not OPENAI_API_KEY:
-        return {
-            "answer": "I couldn’t find this in our FAQ database. Please consult our support team.",
-            "source": "local-fallback"
-        }
+        if not OPENAI_API_KEY:
+            result = {
+                "answer": "I couldn’t find this in our FAQ database. Please consult our support team.",
+                "source": "local-fallback"
+            }
+        else:
+            try:
+                from openai import OpenAI
+                client = OpenAI(api_key=OPENAI_API_KEY)
+                resp = client.chat.completions.create(
+                    model="gpt-5",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful financial assistant."},
+                        {"role": "user", "content": f"Question: {query}"}
+                    ],
+                    temperature=0.3,
+                )
+                gpt_answer = resp.choices[0].message.content
+                result = {
+                    "answer": gpt_answer,
+                    "match": None,
+                    "class": None,
+                    "similarity": round(best_score, 3),
+                    "source": "gpt-5-fallback"
+                }
+            except Exception as e:
+                result = {"answer": None, "error": str(e)}
 
-    try:
-        from openai import OpenAI
-        client = OpenAI(api_key=OPENAI_API_KEY)
-        resp = client.chat.completions.create(
-            model="gpt-5",
-            messages=[
-                {"role": "system", "content": "You are a helpful financial assistant."},
-                {"role": "user", "content": f"Question: {query}"}
-            ],
-            temperature=0.3,
-        )
-        gpt_answer = resp.choices[0].message.content
-        return {
-            "answer": gpt_answer,
-            "match": None,
-            "class": None,
-            "similarity": round(best_score, 3),
-            "source": "gpt-5-fallback"
-        }
-    except Exception as e:
-        return {"answer": None, "error": str(e)}
+    # --- 🧾 Log interaction to Supabase ---
+    if supabase:
+        try:
+            # Safely extract user email or default to "anonymous"
+            user_email = None
+            if hasattr(payload, "user_email") and payload.user_email:
+                user_email = payload.user_email
+            else:
+                user_email = "anonymous"
+
+            supabase.table("faq_logs").insert({
+                "user_email": user_email,
+                "query": query,
+                "matched_question": matched_q,
+                "similarity": round(best_score, 3),
+                "answer_source": result.get("source", "unknown"),
+                "variant": variant,
+                "created_at": datetime.utcnow().isoformat()
+            }).execute()
+        except Exception as e:
+            print(f"⚠️ Supabase log insert failed: {e}")
+
+    return result
 
 # -------------------------------------------------
-# 5️⃣ Health Check Endpoint
+# 6️⃣ Health Check Endpoint
 # -------------------------------------------------
 @app.get("/")
 def root():
