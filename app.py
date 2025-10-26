@@ -99,6 +99,21 @@ def predict_loan(data: LoanApplication):
     except Exception as e:
         feature_importance = {"error": f"SHAP explanation failed: {e}"}
 
+    # --- Log prediction + explanation to Supabase ---
+    if supabase:
+        try:
+            supabase.table("chat_history").insert([
+                {
+                    "user_email": getattr(data, "user_email", "anonymous"),
+                    "message": f"💡 Loan Decision: {label}",
+                    "sender": "bot",
+                    "context": "loan",
+                    "prediction": label,
+                    "explanation_json": feature_importance,
+                }
+            ]).execute()
+        except Exception as e:
+            print(f"⚠️ Supabase chat_history insert failed: {e}")
     # Response payload
     return {
         "prediction": label,
