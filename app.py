@@ -12,6 +12,8 @@ from datetime import datetime
 from dotenv import load_dotenv
 from typing import Optional
 
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 # -------------------------------------------------
 # 1️⃣ Basic App Config
 # -------------------------------------------------
@@ -205,9 +207,9 @@ def faq_answer(payload: FAQQuery):
                     messages=[
                         {"role": "system", "content": "You are a helpful financial assistant."},
                         {"role": "user", "content": f"Question: {query}"}
-                    ],
-                    temperature=0.3,
+                    ]
                 )
+
                 gpt_answer = resp.choices[0].message.content
                 result = {
                     "answer": gpt_answer,
