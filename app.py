@@ -2,7 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 import joblib
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sentence_transformers import SentenceTransformer, util
@@ -58,10 +58,15 @@ class LoanApplication(BaseModel):
     cibil_score: float = Field(..., ge=300, le=900, description="Credit score (300–900)")
 
 @app.post("/predict")
-def predict_loan(data: LoanApplication, mode: str = Query("xai", description="Mode: baseline or xai")):
+def predict_loan(request: Request, data: LoanApplication):
     """Predict loan approval and provide SHAP-based explanations."""
     if model is None or scaler is None:
         raise HTTPException(status_code=500, detail="Model files not loaded properly.")
+
+    # Determine mode (default 'xai' if not provided)
+    variant = request.query_params.get("variant", "xai").lower()
+    if variant not in ("xai", "baseline"):
+        variant = "xai"
 
     # Convert input into DataFrame
     input_data = pd.DataFrame([data.dict()])
@@ -76,14 +81,11 @@ def predict_loan(data: LoanApplication, mode: str = Query("xai", description="Mo
     # Generate SHAP explanations
     feature_importance = {}  # <-- define early so it's always available
 
-    # Handle Baseline vs XAI modes
-    if mode == "baseline":
-        feature_importance = {}  # empty dict for baseline mode
-    else:
-        try:
+    try:
+        if variant == "xai":
             shap_values = explainer.shap_values(scaled)
 
-            # Handle different SHAP output structures
+            # ✅ Handle different SHAP output structures
             if isinstance(shap_values, list):  # For TreeExplainer (list per class)
                 shap_values = shap_values[1]  # positive class (Approved)
 
@@ -100,9 +102,11 @@ def predict_loan(data: LoanApplication, mode: str = Query("xai", description="Mo
                 str(col): round(float(val), 4)
                 for col, val in zip(input_data.columns, shap_array[0])
             }
-
-        except Exception as e:
-            feature_importance = {"error": f"SHAP explanation failed: {e}"}
+        else:
+            # baseline: no SHAP work, no explanation
+            feature_importance = None
+    except Exception as e:
+        feature_importance = {"error": f"SHAP explanation failed: {e}"} if variant == "xai" else None
 
     # --- Log prediction + explanation to Supabase ---
     if supabase:
@@ -114,8 +118,8 @@ def predict_loan(data: LoanApplication, mode: str = Query("xai", description="Mo
                     "sender": "bot",
                     "context": "loan",
                     "prediction": label,
-                    "explanation_json": feature_importance,
-                    "variant": "baseline" if mode == "baseline" else "xai",
+                    "explanation_json": feature_importance if variant == "xai" else None,
+                    "variant": variant,
                 }
             ]).execute()
         except Exception as e:
@@ -124,8 +128,8 @@ def predict_loan(data: LoanApplication, mode: str = Query("xai", description="Mo
     # Response payload
     return {
         "prediction": label,
-        "explanation": feature_importance if mode != "baseline" else None,
-        "variant": "baseline" if mode == "baseline" else "xai",
+        "explanation": feature_importance if variant == "xai" else None,
+        "variant": variant,
     }
 
 # -------------------------------------------------
