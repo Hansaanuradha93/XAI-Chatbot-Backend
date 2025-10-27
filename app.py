@@ -2,14 +2,13 @@ import os
 import numpy as np
 import pandas as pd
 import joblib
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from joblib import load
 from sentence_transformers import SentenceTransformer, util
 from supabase import create_client, Client
-from datetime import datetime
 from dotenv import load_dotenv
+from datetime import datetime
 from typing import Optional
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -59,7 +58,7 @@ class LoanApplication(BaseModel):
     cibil_score: float = Field(..., ge=300, le=900, description="Credit score (300–900)")
 
 @app.post("/predict")
-def predict_loan(data: LoanApplication):
+def predict_loan(data: LoanApplication, mode: str = Query("xai", description="Mode: baseline or xai")):
     """Predict loan approval and provide SHAP-based explanations."""
     if model is None or scaler is None:
         raise HTTPException(status_code=500, detail="Model files not loaded properly.")
@@ -77,29 +76,33 @@ def predict_loan(data: LoanApplication):
     # Generate SHAP explanations
     feature_importance = {}  # <-- define early so it's always available
 
-    try:
-        shap_values = explainer.shap_values(scaled)
+    # Handle Baseline vs XAI modes
+    if mode == "baseline":
+        feature_importance = {}  # empty dict for baseline mode
+    else:
+        try:
+            shap_values = explainer.shap_values(scaled)
 
-        # ✅ Handle different SHAP output structures
-        if isinstance(shap_values, list):  # For TreeExplainer (list per class)
-            shap_values = shap_values[1]  # positive class (Approved)
+            # Handle different SHAP output structures
+            if isinstance(shap_values, list):  # For TreeExplainer (list per class)
+                shap_values = shap_values[1]  # positive class (Approved)
 
-        shap_array = np.array(shap_values)
+            shap_array = np.array(shap_values)
 
-        # Normalize shape
-        if shap_array.ndim == 3:
-            shap_array = shap_array[:, 0, :]
-        elif shap_array.ndim == 1:
-            shap_array = shap_array.reshape(1, -1)
+            # Normalize shape
+            if shap_array.ndim == 3:
+                shap_array = shap_array[:, 0, :]
+            elif shap_array.ndim == 1:
+                shap_array = shap_array.reshape(1, -1)
 
-        # Convert to JSON-safe dict
-        feature_importance = {
-            str(col): round(float(val), 4)
-            for col, val in zip(input_data.columns, shap_array[0])
+            # Convert to JSON-safe dict
+            feature_importance = {
+                str(col): round(float(val), 4)
+                for col, val in zip(input_data.columns, shap_array[0])
             }
 
-    except Exception as e:
-        feature_importance = {"error": f"SHAP explanation failed: {e}"}
+        except Exception as e:
+            feature_importance = {"error": f"SHAP explanation failed: {e}"}
 
     # --- Log prediction + explanation to Supabase ---
     if supabase:
@@ -112,14 +115,17 @@ def predict_loan(data: LoanApplication):
                     "context": "loan",
                     "prediction": label,
                     "explanation_json": feature_importance,
+                    "variant": "baseline" if mode == "baseline" else "xai",
                 }
             ]).execute()
         except Exception as e:
             print(f"⚠️ Supabase chat_history insert failed: {e}")
+
     # Response payload
     return {
         "prediction": label,
-        "explanation": feature_importance,
+        "explanation": feature_importance if mode != "baseline" else None,
+        "variant": "baseline" if mode == "baseline" else "xai",
     }
 
 # -------------------------------------------------
