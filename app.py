@@ -79,7 +79,7 @@ def predict_loan(request: Request, data: LoanApplication):
     label = "Approved" if prediction == 1 else "Rejected"
 
     # Generate SHAP explanations (only if XAI mode)
-    feature_importance = {}
+    feature_importance = {}  # <-- define early so it's always available
 
     try:
         if variant == "xai":
@@ -112,7 +112,7 @@ def predict_loan(request: Request, data: LoanApplication):
     if supabase:
         try:
             # build the bot message depending on mode
-            bot_message = f"💡 Loan Decision: {label}"
+            bot_message = f"Loan Decision: {label}"
             if variant == "xai" and feature_importance:
                 expl_text = "\n".join([f"{k}: {v}" for k, v in feature_importance.items()])
                 bot_message += f"\n\nExplanation:\n{expl_text}"
