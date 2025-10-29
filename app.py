@@ -78,8 +78,8 @@ def predict_loan(request: Request, data: LoanApplication):
     prediction = int(model.predict(scaled)[0])
     label = "Approved" if prediction == 1 else "Rejected"
 
-    # Generate SHAP explanations
-    feature_importance = {}  # <-- define early so it's always available
+    # Generate SHAP explanations (only if XAI mode)
+    feature_importance = {}
 
     try:
         if variant == "xai":
@@ -103,7 +103,7 @@ def predict_loan(request: Request, data: LoanApplication):
                 for col, val in zip(input_data.columns, shap_array[0])
             }
         else:
-            # baseline: no SHAP work, no explanation
+            # baseline: no SHAP explanation generated
             feature_importance = None
     except Exception as e:
         feature_importance = {"error": f"SHAP explanation failed: {e}"} if variant == "xai" else None
@@ -111,10 +111,16 @@ def predict_loan(request: Request, data: LoanApplication):
     # --- Log prediction + explanation to Supabase ---
     if supabase:
         try:
+            # build the bot message depending on mode
+            bot_message = f"💡 Loan Decision: {label}"
+            if variant == "xai" and feature_importance:
+                expl_text = "\n".join([f"{k}: {v}" for k, v in feature_importance.items()])
+                bot_message += f"\n\nExplanation:\n{expl_text}"
+
             supabase.table("chat_history").insert([
                 {
                     "user_email": getattr(data, "user_email", "anonymous"),
-                    "message": f"💡 Loan Decision: {label}",
+                    "message": bot_message,
                     "sender": "bot",
                     "context": "loan",
                     "prediction": label,
@@ -125,7 +131,7 @@ def predict_loan(request: Request, data: LoanApplication):
         except Exception as e:
             print(f"⚠️ Supabase chat_history insert failed: {e}")
 
-    # Response payload
+    # ✅ Always return valid response
     return {
         "prediction": label,
         "explanation": feature_importance if variant == "xai" else None,
@@ -234,12 +240,7 @@ def faq_answer(payload: FAQQuery):
     # --- 🧾 Log interaction to Supabase ---
     if supabase:
         try:
-            # Safely extract user email or default to "anonymous"
-            user_email = None
-            if hasattr(payload, "user_email") and payload.user_email:
-                user_email = payload.user_email
-            else:
-                user_email = "anonymous"
+            user_email = payload.user_email or "anonymous"
 
             supabase.table("faq_logs").insert({
                 "user_email": user_email,
