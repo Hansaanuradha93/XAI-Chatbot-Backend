@@ -1,15 +1,10 @@
 import os
 import numpy as np
 import pandas as pd
-import joblib
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from sentence_transformers import SentenceTransformer, util
-from supabase import create_client, Client
 from dotenv import load_dotenv
-from datetime import datetime
-from typing import Optional
+from core.config import (APP_TITLE)
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -19,7 +14,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Load environment variables from .env file
 load_dotenv()
-app = FastAPI(title="TrustAI Backend")
+app = FastAPI(title=APP_TITLE)
 
 app.add_middleware(
     CORSMiddleware,
@@ -270,9 +265,7 @@ from services.faq_service import answer_faq
 def faq_answer(payload: FAQQuery):
     return answer_faq(payload.query, payload.user_email)
 
-# -------------------------------------------------
-# 6️⃣ Health Check Endpoint
-# -------------------------------------------------
+# Health Check Endpoint
 @app.get("/")
 def root():
     return {"message": "TrustAI backend is running!"}

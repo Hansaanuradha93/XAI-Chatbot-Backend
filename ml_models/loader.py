@@ -1,15 +1,12 @@
 import joblib
-
-# Load ML Model and Scaler
-MODEL_PATH = "./artifacts/main/model.pkl"
-SCALER_PATH = "./artifacts/main/preprocess.pkl"
-EXPLAINER_PATH = "./artifacts/main/explainer.pkl"
-
-# Experimental model paths
-MODEL_PATH_EXPERIMENTAL = "./artifacts/experimental/model.pkl"
-SCALER_PATH_EXPERIMENTAL = "./artifacts/experimental/preprocess.pkl"
-EXPLAINER_PATH_EXPERIMENTAL = "./artifacts/experimental/explainer.pkl"
-
+from core.config import (
+    MODEL_PATH,
+    SCALER_PATH,
+    EXPLAINER_PATH,
+    MODEL_PATH_EXPERIMENTAL,
+    SCALER_PATH_EXPERIMENTAL,
+    EXPLAINER_PATH_EXPERIMENTAL,
+)
 
 def load_models():
     """

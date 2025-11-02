@@ -7,9 +7,7 @@ from openai import OpenAI
 from core.supabase_client import supabase
 
 # FAQ Semantic Search with GPT-5 Fallback
-FAQ_CSV = "data/faq/faq_cleaned.csv"
-EMBED_PATH = "data/faq/faq_embeddings.npy"
-SIM_THRESHOLD = 0.60
+from core.config import FAQ_CSV, EMBED_PATH, SIM_THRESHOLD, GPT_MODEL_FAQ_FALLBACK
 
 faq_df, faq_questions, faq_answers, faq_classes, faq_embeddings, faq_model = None, [], [], [], None, None
 
@@ -67,7 +65,7 @@ def answer_faq(query: str, user_email: str = "anonymous"):
             try:
                 client = OpenAI(api_key=OPENAI_API_KEY)
                 resp = client.chat.completions.create(
-                    model="gpt-5",
+                    model=GPT_MODEL_FAQ_FALLBACK,
                     messages=[
                         {"role": "system", "content": "You are a helpful financial assistant."},
                         {"role": "user", "content": f"Question: {query}"},
