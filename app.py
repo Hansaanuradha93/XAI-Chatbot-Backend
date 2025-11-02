@@ -32,45 +32,14 @@ app.add_middleware(
 # -------------------------------------------------
 # 2️⃣ Load ML Model and Scaler (Loan Prediction)
 # -------------------------------------------------
-MODEL_PATH = "./models/model.pkl"
-SCALER_PATH = "./models/preprocess.pkl"
-EXPLAINER_PATH = "./models/explainer.pkl"
+from ml_models.loader import load_models
 
-# Experimental model paths
-MODEL_PATH_EXPERIMENTAL = "./models_experimental/model.pkl"
-SCALER_PATH_EXPERIMENTAL = "./models_experimental/preprocess.pkl"
-EXPLAINER_PATH_EXPERIMENTAL = "./models_experimental/explainer.pkl"
-
-try:
-    model = joblib.load(MODEL_PATH)
-    scaler = joblib.load(SCALER_PATH)
-    explainer = joblib.load(EXPLAINER_PATH)
-    print("✅ Model, Scaler, and Explainer loaded successfully.")
-
-    model_exp = joblib.load(MODEL_PATH_EXPERIMENTAL)
-    scaler_exp = joblib.load(SCALER_PATH_EXPERIMENTAL)
-    explainer_exp = joblib.load(EXPLAINER_PATH_EXPERIMENTAL)
-    print("🧪 Experimental model set loaded successfully")
-except Exception as e:
-    print(f"❌ Error loading model files: {e}")
-    model = scaler = explainer = None
-
+model, scaler, explainer, model_exp, scaler_exp, explainer_exp = load_models()
 
 # -------------------------------------------------
 # 3️⃣ Loan Prediction Schema
 # -------------------------------------------------
-class LoanApplication(BaseModel):
-    no_of_dependents: int = Field(..., description="Number of dependents")
-    education: int = Field(..., description="0 = Graduate, 1 = Not Graduate")
-    self_employed: int = Field(..., description="1 = Yes, 0 = No")
-    income_annum: float = Field(..., ge=0, description="Annual income (>=0)")
-    loan_amount: float = Field(..., ge=0, description="Requested loan amount (>=0)")
-    loan_term: int = Field(..., ge=1, le=12, description="Repayment duration (1–12 months)")
-    cibil_score: float = Field(..., ge=300, le=900, description="Credit score (300–900)")
-    residential_assets_value: float = Field(0, ge=0, description="Value of residential properties")
-    commercial_assets_value: float = Field(0, ge=0, description="Value of commercial properties")
-    luxury_assets_value: float = Field(0, ge=0, description="Value of luxury assets")
-    bank_asset_value: float = Field(0, ge=0, description="Total bank deposits")
+from ml_models.schemas import LoanApplication, FAQQuery
 
 # -------------------------------------------------
 # Generate Humanized Explanation via GPT
@@ -412,10 +381,6 @@ else:
     print("⚠️ FAQ data not found. Run scripts/prepare_faq.py first.")
 
 SIM_THRESHOLD = 0.60
-
-class FAQQuery(BaseModel):
-    query: str
-    user_email: Optional[str] = None
 
 @app.post("/faq_answer")
 def faq_answer(payload: FAQQuery):
