@@ -39,6 +39,9 @@ from ml_models.schemas import LoanApplication, FAQQuery
 # Generate Humanized Explanation via GPT
 from services.explanation_service import generate_human_explanation
 
+# Supabase Client Setup
+from core.supabase_client import supabase
+
 @app.post("/loan_form_test")
 def loan_form_test(request: Request, data: LoanApplication):
     """
@@ -259,19 +262,6 @@ def predict_loan(request: Request, data: LoanApplication):
         "explanation": feature_importance if variant == "xai" else None,
         "variant": variant,
     }
-
-# -------------------------------------------------
-# 4️⃣ Supabase Client Setup
-# -------------------------------------------------
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-supabase: Client = None
-
-if SUPABASE_URL and SUPABASE_KEY:
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    print("✅ Supabase connected.")
-else:
-    print("⚠️ Supabase credentials not set. Logging disabled.")
 
 # -------------------------------------------------
 # 5️⃣ FAQ Semantic Search with GPT-5 Fallback
