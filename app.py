@@ -47,12 +47,15 @@ def loan_form_test(request: Request, data: LoanApplication):
     # Ensure experimental models exist
     if model_exp is None or scaler_exp is None or explainer_exp is None:
         raise HTTPException(status_code=500, detail="Experimental model not loaded.")
+    # Determine mode (default 'xai')
+    variant = request.query_params.get("variant", "xai").lower()
+    if variant not in ("xai", "baseline"):
+        variant = "xai"
 
     # Convert input to DataFrame
     input_data = pd.DataFrame([data.dict()])
 
     # -------------- Derive Additional Features ------------------
-
     # Binary asset indicators
     input_data["has_residential_assets_value"] = (input_data["residential_assets_value"] > 0).astype(int)
     input_data["has_commercial_assets_value"] = (input_data["commercial_assets_value"] > 0).astype(int)
@@ -144,34 +147,38 @@ def loan_form_test(request: Request, data: LoanApplication):
         raise HTTPException(status_code=500, detail=f"Model prediction failed: {e}")
 
     # -------------- SHAP Explanation ------------------
+    feature_importance = None
     try:
-        shap_values = explainer_exp.shap_values(scaled)
-        if isinstance(shap_values, list):
-            shap_values = shap_values[1]  # positive class
-        shap_array = np.array(shap_values)
-        if shap_array.ndim == 3:
-            shap_array = shap_array[:, 0, :]
-        elif shap_array.ndim == 1:
-            shap_array = shap_array.reshape(1, -1)
+        if variant == "xai":
+            shap_values = explainer_exp.shap_values(scaled)
+            if isinstance(shap_values, list):
+                shap_values = shap_values[1]  # positive class
+            shap_array = np.array(shap_values)
+            if shap_array.ndim == 3:
+                shap_array = shap_array[:, 0, :]
+            elif shap_array.ndim == 1:
+                shap_array = shap_array.reshape(1, -1)
 
-        feature_importance = {
-            str(col): round(float(val), 4)
-            for col, val in zip(feature_order, shap_array[0])
-        }
+            feature_importance = {
+                str(col): round(float(val), 4)
+                for col, val in zip(feature_order, shap_array[0])
+            }
     except Exception as e:
-        feature_importance = {"error": f"SHAP explanation failed: {e}"}
+        feature_importance = {"error": f"SHAP explanation failed: {e}"} if variant == "xai" else None
 
     # --- Generate human explanation ---
-    result = {
-        "loan_decision": label,
-        "probability": round(proba, 3),
-        "explanation": feature_importance,
-    }
-    human_message = generate_human_explanation(result)
+    human_message = None
+    if variant == "xai":
+        result = {
+            "loan_decision": label,
+            "probability": round(proba, 3),
+            "explanation": feature_importance,
+        }
+        human_message = generate_human_explanation(result)
 
     # -------------- Return Structured Response ------------------
     return {
-        "loan_decision": label,
+        "prediction": label,
         "probability": round(proba, 3),
         "explanation": feature_importance,
         "human_message": human_message,
