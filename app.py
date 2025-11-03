@@ -37,6 +37,63 @@ from services.explanation_service import generate_human_explanation
 # Supabase Client Setup
 from core.supabase_client import supabase
 
+# User Mode Allocation (A/B Testing)
+from random import choice
+from core.config import (ADMIN_EMAILS)
+
+@app.post("/user_mode")
+async def user_mode(request: Request):
+    """
+    Manage user A/B mode allocation.
+    - If the user is new: assign random mode ('xai' or 'baseline')
+    - Admin users always get 'admin' role and can access both modes
+    - Return the user's stored role + mode for frontend rendering
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+
+    email = payload.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Missing email field.")
+
+    # Determine role
+    role = "admin" if email in ADMIN_EMAILS else "user"
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not initialized")
+
+    try:
+        existing = (
+            supabase.table("users")
+            .select("email, role, mode")
+            .eq("email", email)
+            .execute()
+        )
+
+        if existing.data and len(existing.data) > 0:
+            user_data = existing.data[0]
+            return {
+                "email": user_data["email"],
+                "role": user_data["role"],
+                "mode": user_data["mode"],
+            }
+
+        # If new user → assign mode
+        from random import choice
+        mode = choice(["xai", "baseline"]) if role == "user" else "xai"
+
+        supabase.table("users").insert(
+            {"email": email, "role": role, "mode": mode}
+        ).execute()
+
+        return {"email": email, "role": role, "mode": mode}
+
+    except Exception as e:
+        print(f"⚠️ User mode allocation failed: {e}")
+        raise HTTPException(status_code=500, detail="User allocation failed.")
+
 @app.post("/loan_form_test")
 def loan_form_test(request: Request, data: LoanApplication):
     """
@@ -175,6 +232,8 @@ def loan_form_test(request: Request, data: LoanApplication):
             "explanation": feature_importance,
         }
         human_message = generate_human_explanation(result)
+    else:
+        human_message = f"Your loan application has been {label.lower()}."
 
     # -------------- Return Structured Response ------------------
     return {
