@@ -18,7 +18,7 @@ app = FastAPI(title=APP_TITLE)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # you can restrict to frontend URL later
+    allow_origins=["https://xai-chatbot.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
