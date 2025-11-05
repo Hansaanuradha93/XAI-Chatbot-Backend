@@ -93,7 +93,7 @@ data/
 datasets/
 raw_data/
 temp/
-*.csv
+# *.csv
 *.xlsx
 *.tsv
 
