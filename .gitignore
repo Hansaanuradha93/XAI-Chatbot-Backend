@@ -79,7 +79,7 @@ Desktop.ini
 secrets.toml
 
 # Model files / large binaries
-*.pkl
+# *.pkl
 *.joblib
 *.h5
 *.pt
@@ -89,7 +89,7 @@ secrets.toml
 *.weights
 
 # Data / datasets
-data/
+# data/
 datasets/
 raw_data/
 temp/
