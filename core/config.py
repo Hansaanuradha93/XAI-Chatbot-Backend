@@ -18,8 +18,8 @@ SCALER_PATH_EXPERIMENTAL = "./artifacts/experimental/preprocess.pkl"
 EXPLAINER_PATH_EXPERIMENTAL = "./artifacts/experimental/explainer.pkl"
 
 # --- FAQ Assets ---
-FAQ_CSV = "data/faq/faq_cleaned.csv"
-EMBED_PATH = "data/faq/faq_embeddings.npy"
+FAQ_CSV = "./data/faq/faq_cleaned.csv"
+EMBED_PATH = "./data/faq/faq_embeddings.npy"
 
 # --- Similarity Threshold ---
 SIM_THRESHOLD = 0.60
