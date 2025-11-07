@@ -4,7 +4,7 @@ pydantic
 joblib
 numpy
 pandas
-scikit-learn==1.2.2
+scikit-learn
 shap
 supabase
 python-dotenv
