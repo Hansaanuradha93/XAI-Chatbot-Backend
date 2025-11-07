@@ -511,6 +511,11 @@ def faq_answer(payload: FAQQuery):
 def root():
     return {"message": "TrustAI backend is running!"}
 
+@app.get("/debug/port")
+def debug_port():
+    """Check what port is currently bound (for Render debugging)."""
+    return {"PORT": os.environ.get("PORT", "not set")}
+
 # --- Run with: uvicorn app:app --reload ---
 if __name__ == "__main__":
     import uvicorn, os
