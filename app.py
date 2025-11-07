@@ -519,6 +519,6 @@ def debug_port():
 # --- Run with: uvicorn app:app --reload ---
 if __name__ == "__main__":
     import uvicorn, os
-    port = int(os.environ.get("PORT", 8000))
-    print(f"🚀 Starting server on port {port}")
+    port = int(os.environ.get("PORT", 10000))
+    print(f"🚀 Starting TrustAI backend on port {port}")
     uvicorn.run("app:app", host="0.0.0.0", port=port)
