@@ -1,35 +1,40 @@
 import joblib
-from core.config import (
-    MODEL_PATH,
-    SCALER_PATH,
-    EXPLAINER_PATH,
-    MODEL_PATH_EXPERIMENTAL,
-    SCALER_PATH_EXPERIMENTAL,
-    EXPLAINER_PATH_EXPERIMENTAL,
-)
+import os
+import traceback
+
+def safe_load(path, label):
+    print(f"🔍 Attempting to load {label} → {path}")
+    if not os.path.exists(path):
+        print(f"⚠️ Missing file: {path}")
+        return None
+    try:
+        obj = joblib.load(path)
+        print(f"✅ Loaded {label} successfully ({type(obj).__name__})")
+        return obj
+    except Exception as e:
+        print(f"❌ Failed to load {label}: {e}")
+        print(traceback.format_exc())
+        return None
 
 def load_models():
-    """
-    Load both the main (production) model set and the experimental model set.
-    Returns:
-        model, scaler, explainer,
-        model_exp, scaler_exp, explainer_exp
-    """
-    model = scaler = explainer = None
-    model_exp = scaler_exp = explainer_exp = None
+    print("📦 [loader] Initializing model loading sequence...")
+    base_path = "./artifacts/main"
+    exp_path = "./artifacts/experimental"
 
-    try:
-        model = joblib.load(MODEL_PATH)
-        scaler = joblib.load(SCALER_PATH)
-        explainer = joblib.load(EXPLAINER_PATH)
-        print("✅ Model, Scaler, and Explainer loaded successfully.")
+    # Show directory contents
+    for p in [base_path, exp_path]:
+        if os.path.exists(p):
+            print(f"📁 Contents of {p}: {os.listdir(p)}")
+        else:
+            print(f"⚠️ Directory not found: {p}")
 
-        model_exp = joblib.load(MODEL_PATH_EXPERIMENTAL)
-        scaler_exp = joblib.load(SCALER_PATH_EXPERIMENTAL)
-        explainer_exp = joblib.load(EXPLAINER_PATH_EXPERIMENTAL)
-        print("🧪 Experimental model set loaded successfully")
-    except Exception as e:
-        # We keep the same behavior as current app.py: swallow and just print.
-        print(f"❌ Error loading model files: {e}")
+    model = safe_load(os.path.join(base_path, "model.pkl"), "main model")
+    scaler = safe_load(os.path.join(base_path, "preprocess.pkl"), "main scaler")
+    explainer = safe_load(os.path.join(base_path, "explainer.pkl"), "main explainer")
 
+    model_exp = safe_load(os.path.join(exp_path, "model.pkl"), "experimental model")
+    scaler_exp = safe_load(os.path.join(exp_path, "preprocess.pkl"), "experimental scaler")
+    explainer_exp = safe_load(os.path.join(exp_path, "explainer.pkl"), "experimental explainer")
+
+    print("✅ [loader] Model loading complete.")
     return model, scaler, explainer, model_exp, scaler_exp, explainer_exp
