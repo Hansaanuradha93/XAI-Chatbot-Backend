@@ -18,7 +18,10 @@ app = FastAPI(title=APP_TITLE)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://xai-chatbot.vercel.app"],
+    allow_origins=[
+        "https://xai-chatbot.vercel.app",
+        "http://localhost:3000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -528,6 +531,6 @@ def debug_health():
 # --- Run with: uvicorn app:app --reload ---
 if __name__ == "__main__":
     import uvicorn, os
-    port = int(os.environ.get("PORT", 10000))
-    print(f"🚀 Starting TrustAI backend on port {port}")
+    port = int(os.environ.get("PORT", 8000))
+    print(f"🚀 Starting server on port {port}")
     uvicorn.run("app:app", host="0.0.0.0", port=port)
