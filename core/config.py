@@ -31,7 +31,6 @@ GPT_MODEL_FAQ_FALLBACK = "gpt-5"
 # --- Application Metadata ---
 APP_TITLE = "TrustAI Backend"
 APP_HOST = "127.0.0.1"
-APP_PORT = 8000
 
 # --- Admin Users---
 ADMIN_EMAILS = [

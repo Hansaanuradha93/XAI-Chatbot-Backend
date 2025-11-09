@@ -29,73 +29,16 @@ app.add_middleware(
 
 # Load ML Model and Scaler (Loan Prediction)
 from ml_models.loader import load_models
-model, scaler, explainer, model_exp, scaler_exp, explainer_exp = load_models()
+model, scaler, explainer = load_models()
 
 # Loan Prediction Schema
-from ml_models.schemas import LoanApplication, FAQQuery
+from ml_models.schemas import LoanApplication
 
 # Generate Humanized Explanation via GPT
 from services.explanation_service import generate_human_explanation
 
 # Supabase Client Setup
 from core.supabase_client import supabase
-
-# User Mode Allocation (A/B Testing)
-from random import choice
-from core.config import (ADMIN_EMAILS)
-
-@app.post("/user_mode")
-async def user_mode(request: Request):
-    """
-    Manage user A/B mode allocation.
-    - If the user is new: assign random mode ('xai' or 'baseline')
-    - Admin users always get 'admin' role and can access both modes
-    - Return the user's stored role + mode for frontend rendering
-    """
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
-
-    email = payload.get("email")
-    if not email:
-        raise HTTPException(status_code=400, detail="Missing email field.")
-
-    # Determine role
-    role = "admin" if email in ADMIN_EMAILS else "user"
-
-    if not supabase:
-        raise HTTPException(status_code=500, detail="Supabase client not initialized")
-
-    try:
-        existing = (
-            supabase.table("users")
-            .select("email, role, mode")
-            .eq("email", email)
-            .execute()
-        )
-
-        if existing.data and len(existing.data) > 0:
-            user_data = existing.data[0]
-            return {
-                "email": user_data["email"],
-                "role": user_data["role"],
-                "mode": user_data["mode"],
-            }
-
-        # If new user → assign mode
-        from random import choice
-        mode = choice(["xai", "baseline"]) if role == "user" else "xai"
-
-        supabase.table("users").insert(
-            {"email": email, "role": role, "mode": mode}
-        ).execute()
-
-        return {"email": email, "role": role, "mode": mode}
-
-    except Exception as e:
-        print(f"⚠️ User mode allocation failed: {e}")
-        raise HTTPException(status_code=500, detail="User allocation failed.")
 
 import traceback
 
@@ -111,7 +54,7 @@ def loan_form_test(request: Request, data: LoanApplication):
     print(f"🔹 Raw input: {data.dict()}")
 
     # --- Model existence check ---
-    if model_exp is None or scaler_exp is None or explainer_exp is None:
+    if model is None or scaler is None or explainer is None:
         print("❌ Experimental model files not loaded properly.")
         raise HTTPException(status_code=500, detail="Experimental model not loaded.")
 
@@ -217,9 +160,9 @@ def loan_form_test(request: Request, data: LoanApplication):
     # --- Prediction ---
     try:
         print("🔮 Running model prediction...")
-        scaled = scaler_exp.transform(input_data)
-        prediction = int(model_exp.predict(scaled)[0])
-        proba = round(float(model_exp.predict_proba(scaled)[0][1]), 3)
+        scaled = scaler.transform(input_data)
+        prediction = int(model.predict(scaled)[0])
+        proba = round(float(model.predict_proba(scaled)[0][1]), 3)
         label = "Approved" if prediction == 1 else "Rejected"
         print(f"✅ Prediction complete → {label} (prob={proba})")
     except Exception as e:
@@ -231,7 +174,7 @@ def loan_form_test(request: Request, data: LoanApplication):
     if variant == "xai":
         try:
             print("📊 Generating SHAP explanation...")
-            shap_values = explainer_exp.shap_values(scaled)
+            shap_values = explainer.shap_values(scaled)
             if isinstance(shap_values, list):
                 shap_values = shap_values[1]  # positive class
             shap_array = np.array(shap_values)
@@ -280,7 +223,7 @@ def loan_form_test(request: Request, data: LoanApplication):
     scales data, predicts, and returns SHAP explanation.
     """
     # Ensure experimental models exist
-    if model_exp is None or scaler_exp is None or explainer_exp is None:
+    if model is None or scaler is None or explainer is None:
         raise HTTPException(status_code=500, detail="Experimental model not loaded.")
     # Determine mode (default 'xai')
     variant = request.query_params.get("variant", "xai").lower()
@@ -374,9 +317,9 @@ def loan_form_test(request: Request, data: LoanApplication):
 
     # -------------- Scale & Predict ------------------
     try:
-        scaled = scaler_exp.transform(input_data)
-        prediction = int(model_exp.predict(scaled)[0])
-        proba = round(float(model_exp.predict_proba(scaled)[0][1]), 3)
+        scaled = scaler.transform(input_data)
+        prediction = int(model.predict(scaled)[0])
+        proba = round(float(model.predict_proba(scaled)[0][1]), 3)
         label = "Approved" if prediction == 1 else "Rejected"
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Model prediction failed: {e}")
@@ -385,7 +328,7 @@ def loan_form_test(request: Request, data: LoanApplication):
     feature_importance = None
     try:
         if variant == "xai":
-            shap_values = explainer_exp.shap_values(scaled)
+            shap_values = explainer.shap_values(scaled)
             if isinstance(shap_values, list):
                 shap_values = shap_values[1]  # positive class
             shap_array = np.array(shap_values)
@@ -420,9 +363,6 @@ def loan_form_test(request: Request, data: LoanApplication):
         "explanation": feature_importance,
         "human_message": human_message,
     }
-
-@app.post("/predict")
-def predict_loan(request: Request, data: LoanApplication):
     """Predict loan approval and provide SHAP-based explanations."""
     if model is None or scaler is None:
         raise HTTPException(status_code=500, detail="Model files not loaded properly.")
@@ -502,35 +442,14 @@ def predict_loan(request: Request, data: LoanApplication):
         "variant": variant,
     }
 
-# FAQ Semantic Search with GPT-5 Fallback
-from services.faq_service import answer_faq
-
-@app.post("/faq_answer")
-def faq_answer(payload: FAQQuery):
-    return answer_faq(payload.query, payload.user_email)
-
 # Health Check Endpoint
 @app.get("/")
 def root():
     return {"message": "TrustAI backend is running!"}
 
-@app.get("/debug/health")
-def debug_health():
-    return {
-        "cwd": os.getcwd(),
-        "files": os.listdir('.'),
-        "model_loaded": model is not None,
-        "scaler_loaded": scaler is not None,
-        "explainer_loaded": explainer is not None,
-        "model_exp_loaded": model_exp is not None,
-        "scaler_exp_loaded": scaler_exp is not None,
-        "explainer_exp_loaded": explainer_exp is not None,
-        "PORT": os.environ.get("PORT"),
-    }
-
 # --- Run with: uvicorn app:app --reload ---
 if __name__ == "__main__":
     import uvicorn, os
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 5000))
     print(f"🚀 Starting server on port {port}")
-    uvicorn.run("app:app", host="0.0.0.0", port=port)
+    uvicorn.run("app:app", host="0.0.0.0", port=5000)
