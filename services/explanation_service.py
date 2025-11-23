@@ -2,84 +2,120 @@ import os
 import json
 from openai import OpenAI
 
-# -------------------------------------------------
-# Generate Humanized Explanation via GPT
-# -------------------------------------------------
 
-def generate_human_explanation(result):
-    """Send the backend JSON result to GPT-5 for a human-readable summary."""
-    system_message = (
-        "You are a helpful financial assistant working for a digital bank. "
-        "Your goal is to explain loan decisions in clear, human terms. "
-        "Avoid technical jargon like 'features' or 'weights'. "
-        "Use polite, confident, and professional language suitable for a customer. It should be in active voice and point form. "
-        "Keep explanations concise (10–20 words) and focused on the most influential factors."
-    )
+# ======================================================
+# OOAD COMPONENT 1 — Summarizer (Single Responsibility)
+# ======================================================
+class ExplanationSummarizer:
+    """Extracts and summarizes the top SHAP features for the GPT prompt."""
 
-    # ✅ Clean and summarize input before sending to GPT
-    try:
+    def summarize(self, result: dict) -> dict:
         explanation = result.get("explanation", {})
-        top_features = sorted(
-            explanation.items(), key=lambda x: abs(x[1]), reverse=True
-        )[:5]
 
-        summary_data = {
+        try:
+            # Sort by absolute SHAP impact (largest first)
+            top_features = sorted(
+                explanation.items(), key=lambda x: abs(x[1]), reverse=True
+            )[:5]
+        except Exception:
+            top_features = []
+
+        return {
             "loan_decision": result.get("loan_decision"),
             "probability": result.get("probability"),
             "top_features": top_features,
         }
-    except Exception as e:
-        print(f"⚠️ Failed to summarize features for GPT: {e}")
-        summary_data = result
 
-    user_prompt = f"""
-    Here is the loan decision result from the model:
-    {json.dumps(summary_data, indent=2)}
 
-    Please rewrite this decision as a clear, human explanation for the customer.
-    Include:
-    1. The decision outcome and confidence.
-    2. The main financial factors that influenced the decision.
-    3. A short and polite conclusion encouraging responsible borrowing.
-    """
+# ======================================================
+# OOAD COMPONENT 2 — GPT Client (OpenAI Dependency)
+# ======================================================
+class GPTExplanationClient:
+    """Handles communication with GPT (OpenAI API)."""
 
-    try:
+    def __init__(self):
         OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-        client = OpenAI(api_key=OPENAI_API_KEY)
+        self.client = OpenAI(api_key=OPENAI_API_KEY)
 
-        response = client.chat.completions.create(
+        self.system_message = (
+            "You are a helpful financial assistant working for a digital bank. "
+            "Your goal is to explain loan decisions in clear, human terms. "
+            "Avoid technical jargon like 'features' or 'weights'. "
+            "Use polite, confident, and professional language suitable for a customer. "
+            "Use active voice and bullet points. "
+            "Keep explanations concise (10–20 words per bullet). "
+            "Focus only on the most influential financial factors."
+        )
+
+    def generate(self, summary_data: dict) -> str:
+        """Send the structured summary to GPT for a human explanation."""
+
+        prompt = f"""
+        Here is the loan decision information:
+        {json.dumps(summary_data, indent=2)}
+
+        Please write a clear, human-friendly explanation including:
+        1. The decision outcome & confidence level.
+        2. The main factors influencing the decision.
+        3. A polite closing remark about responsible borrowing.
+        """
+
+        response = self.client.chat.completions.create(
             model="gpt-4-turbo",
             messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": user_prompt},
+                {"role": "system", "content": self.system_message},
+                {"role": "user", "content": prompt},
             ],
             temperature=0.7,
-            max_tokens=350,
+            max_tokens=300,
             timeout=30,
         )
 
-        message = response.choices[0].message.content.strip()
+        msg = response.choices[0].message.content.strip()
+        return msg
 
-        # ✅ Fallback in case GPT returns empty
-        if not message:
-            print("⚠️ GPT returned an empty message. Using fallback text.")
-            decision = result.get("loan_decision", "a decision")
-            prob = result.get("probability", 0)
-            message = (
-                f"The system made a {decision.lower()} with confidence {prob*100:.1f}%. "
-                "Your overall financial profile suggests stable income and reasonable asset strength. "
-                "Please continue maintaining healthy credit habits."
-            )
 
-        return message
+# ======================================================
+# OOAD COMPONENT 3 — High-Level Service
+# ======================================================
+class ExplanationService:
+    """Coordinates summarization + GPT explanation with fallback."""
 
-    except Exception as e:
-        print(f"⚠️ GPT explanation failed: {e}")
+    def __init__(self):
+        self.summarizer = ExplanationSummarizer()
+        self.gpt_client = GPTExplanationClient()
 
-        # ✅ Fallback response to prevent null in API response
-        decision = result.get("loan_decision", "a decision")
+    def explain(self, result: dict) -> str:
+        """Main entry: create human-friendly explanation."""
+
+        try:
+            summary = self.summarizer.summarize(result)
+        except Exception:
+            summary = result
+
+        try:
+            message = self.gpt_client.generate(summary)
+            if message:
+                return message
+        except Exception as e:
+            print(f"⚠️ GPT explanation failed: {e}")
+
+        # Fallback
+        decision = result.get("loan_decision", "a loan decision")
         prob = result.get("probability", 0)
         return (
             f"The system made a {decision.lower()} with confidence {prob*100:.1f}%. "
-            "Your financial details were analyzed carefully, and the result reflects your current standing."
+            "Your financial profile was carefully assessed."
         )
+
+
+# ======================================================
+# PUBLIC API (unchanged)
+# ======================================================
+def generate_human_explanation(result: dict) -> str:
+    """
+    Public function used by your loan pipeline.
+    Uses an OO-based internal architecture.
+    """
+    service = ExplanationService()
+    return service.explain(result)

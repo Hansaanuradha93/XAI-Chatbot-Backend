@@ -4,7 +4,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from core.config import (APP_TITLE)
+from core.config import APP_TITLE
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -18,10 +18,7 @@ app = FastAPI(title=APP_TITLE)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://xai-chatbot.vercel.app",
-        "http://localhost:3000"
-    ],
+    allow_origins=["https://xai-chatbot.vercel.app", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,6 +26,7 @@ app.add_middleware(
 
 # Load ML Model and Scaler (Loan Prediction)
 from ml_models.loader import load_models
+
 model, scaler, explainer = load_models()
 
 # Loan Prediction Schema
@@ -42,8 +40,50 @@ from core.supabase_client import supabase
 
 import traceback
 
+from ml_models.feature_engineering import FeatureEngineer
+from ml_models.predictor import LoanPredictor
+from ml_models.shap_explainer import ShapExplainer
+from ml_models.loan_pipeline import LoanPipeline
+
+engineer = FeatureEngineer()
+
+feature_order = [
+    "no_of_dependents",
+    "education",
+    "self_employed",
+    "income_annum",
+    "loan_amount",
+    "loan_term",
+    "cibil_score",
+    "residential_assets_value",
+    "commercial_assets_value",
+    "luxury_assets_value",
+    "bank_asset_value",
+    "has_residential_assets_value",
+    "has_commercial_assets_value",
+    "has_luxury_assets_value",
+    "has_bank_asset_value",
+    "income_annum_log",
+    "loan_amount_log",
+    "residential_assets_value_log",
+    "commercial_assets_value_log",
+    "luxury_assets_value_log",
+    "bank_asset_value_log",
+    "debt_to_income_ratio",
+    "total_asset_value",
+    "loan_to_asset_ratio",
+    "cibil_category_encoded",
+]
+
+predictor = LoanPredictor(model, scaler, feature_order)
+shap = ShapExplainer(explainer, feature_order)
+pipeline = LoanPipeline(engineer, predictor, shap, generate_human_explanation)
+
+
 @app.post("/loan_form_test")
 def loan_form_test(request: Request, data: LoanApplication):
+    variant = request.query_params.get("variant", "xai")
+    return pipeline.run(data.dict(), variant)
     """
     Predict loan decision using the experimental logistic model.
     Receives 11 raw user inputs, derives all engineered features,
@@ -75,10 +115,18 @@ def loan_form_test(request: Request, data: LoanApplication):
     # --- Derive engineered features ---
     try:
         print("🧮 Deriving engineered features...")
-        input_data["has_residential_assets_value"] = (input_data["residential_assets_value"] > 0).astype(int)
-        input_data["has_commercial_assets_value"] = (input_data["commercial_assets_value"] > 0).astype(int)
-        input_data["has_luxury_assets_value"] = (input_data["luxury_assets_value"] > 0).astype(int)
-        input_data["has_bank_asset_value"] = (input_data["bank_asset_value"] > 0).astype(int)
+        input_data["has_residential_assets_value"] = (
+            input_data["residential_assets_value"] > 0
+        ).astype(int)
+        input_data["has_commercial_assets_value"] = (
+            input_data["commercial_assets_value"] > 0
+        ).astype(int)
+        input_data["has_luxury_assets_value"] = (
+            input_data["luxury_assets_value"] > 0
+        ).astype(int)
+        input_data["has_bank_asset_value"] = (
+            input_data["bank_asset_value"] > 0
+        ).astype(int)
 
         for col in [
             "income_annum",
@@ -218,14 +266,17 @@ def loan_form_test(request: Request, data: LoanApplication):
         "human_message": human_message,
     }
 
+
 # Health Check Endpoint
 @app.get("/")
 def root():
     return {"message": "TrustAI backend is running!"}
 
+
 # --- Run with: uvicorn app:app --reload ---
 if __name__ == "__main__":
     import uvicorn, os
+
     port = int(os.environ.get("PORT", 5000))
     print(f"🚀 Starting server on port {port}")
     uvicorn.run("app:app", host="0.0.0.0", port=5000)
