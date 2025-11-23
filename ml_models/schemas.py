@@ -9,7 +9,7 @@ class LoanApplication(BaseModel):
     self_employed: int = Field(..., description="1 = Yes, 0 = No")
     income_annum: float = Field(..., ge=0, description="Annual income (>=0)")
     loan_amount: float = Field(..., ge=0, description="Requested loan amount (>=0)")
-    loan_term: int = Field(..., ge=1, le=12, description="Repayment duration (1–12 months)")
+    loan_term: int = Field(..., ge=1, le=20, description="Repayment duration (1–20 years)")
     cibil_score: float = Field(..., ge=300, le=900, description="Credit score (300–900)")
     residential_assets_value: float = Field(0, ge=0, description="Value of residential properties")
     commercial_assets_value: float = Field(0, ge=0, description="Value of commercial properties")
