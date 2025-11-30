@@ -2,6 +2,7 @@ import joblib
 import os
 import traceback
 
+
 def safe_load(path, label):
     print(f"🔍 Attempting to load {label} → {path}")
     if not os.path.exists(path):
@@ -15,6 +16,7 @@ def safe_load(path, label):
         print(f"❌ Failed to load {label}: {e}")
         print(traceback.format_exc())
         return None
+
 
 def load_models():
     print("📦 [loader] Initializing model loading sequence...")
